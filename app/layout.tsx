@@ -3,9 +3,10 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'SecSystem — Dashboard Keamanan',
-  description: 'Pantau perangkat, lokasi, dan aktivitas keamanan dalam satu dashboard SecSystem.',
+  title: 'SecSystem — Operasional Keamanan',
+  description: 'Portal admin kontrol tamu dan laporan tugas jaga, serta pemantauan kinerja supervisor.',
   generator: 'v0.app',
+  referrer: 'strict-origin-when-cross-origin',
   icons: {
     icon: [
       {
@@ -26,11 +27,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  colorScheme: 'dark',
+  themeColor: '#080b0f',
 }
 
 export default function RootLayout({
