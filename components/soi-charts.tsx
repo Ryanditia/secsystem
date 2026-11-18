@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import type { DailyOperations } from '@/lib/monthly-recap'
-import type { SoiIndicator, SoiIndicatorSide } from '@/lib/soi-baseline'
+import type { SoiIndicator, SoiIndicatorSide, SoiMonthBaseline } from '@/lib/soi-baseline'
 
 const indicatorConfig = {
   achievementPercent: { label: 'Pencapaian', color: 'var(--chart-1)' },
@@ -20,6 +20,13 @@ const quantityConfig = {
 const qualityConfig = {
   attendanceQuality: { label: 'Kehadiran lengkap', color: 'var(--chart-1)' },
   taskQualityPercent: { label: 'Tugas selesai', color: 'var(--chart-2)' },
+} satisfies ChartConfig
+
+const soiTrendConfig = {
+  overallPercent: { label: 'SOI', color: 'var(--chart-1)' },
+  leadingPercent: { label: 'Leading', color: 'var(--chart-2)' },
+  laggingPercent: { label: 'Lagging', color: 'var(--chart-3)' },
+  csiPercent: { label: 'CSI', color: 'var(--chart-4)' },
 } satisfies ChartConfig
 
 export function SoiIndicatorChart({ indicators }: { indicators: readonly SoiIndicator[] }) {
@@ -41,7 +48,7 @@ export function SoiIndicatorChart({ indicators }: { indicators: readonly SoiIndi
           </select>
         </label>
       </div>
-      <ChartContainer config={indicatorConfig} className="mt-3 h-[290px] w-full">
+      {rows.length ? <ChartContainer config={indicatorConfig} className="mt-3 h-[290px] w-full">
         <BarChart accessibilityLayer data={rows} margin={{ left: -14, right: 10, top: 12 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis dataKey="shortName" tickLine={false} axisLine={false} tickMargin={8} interval={0} angle={-22} textAnchor="end" height={62} />
@@ -49,8 +56,30 @@ export function SoiIndicatorChart({ indicators }: { indicators: readonly SoiIndi
           <ChartTooltip content={<ChartTooltipContent labelFormatter={(_label, payload) => payload?.[0]?.payload?.name ?? ''} formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Pencapaian']} />} />
           <Bar dataKey="achievementPercent" fill="var(--color-achievementPercent)" radius={[4, 4, 0, 0]} />
         </BarChart>
-      </ChartContainer>
+      </ChartContainer> : <div className="mt-3 flex h-[290px] items-center justify-center rounded-xl border border-dashed border-white/[0.1] px-5 text-center text-xs text-slate-500">Workbook SOI untuk periode ini belum tersedia.</div>}
       <p className="mt-2 text-[10px] leading-4 text-slate-600">Skor di atas 100% menunjukkan realisasi melebihi target; maturity level tetap mengikuti lembar SOI sumber.</p>
+    </section>
+  )
+}
+
+export function SoiMonthlyTrendChart({ months }: { months: SoiMonthBaseline[] }) {
+  const data = useMemo(() => buildSoiTrendRows(months), [months])
+  return (
+    <section className="rounded-2xl border border-white/[0.08] bg-[#101419] p-4 sm:p-5">
+      <div><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-lime-200">Tren resmi SOI</p><h3 className="mt-1 text-sm font-semibold text-white">Perbandingan SOI bulanan</h3><p className="mt-1 text-[10px] text-slate-500">Hanya bulan dengan workbook SOI yang tersedia; periode tanpa file dibiarkan kosong.</p></div>
+      <ChartContainer config={soiTrendConfig} className="mt-3 h-[280px] w-full">
+        <LineChart accessibilityLayer data={data} margin={{ left: -14, right: 12, top: 14 }}>
+          <CartesianGrid vertical={false} strokeDasharray="3 3" />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+          <YAxis domain={[80, 100]} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}%`} />
+          <ChartTooltip content={<ChartTooltipContent labelFormatter={(_label, payload) => payload?.[0]?.payload?.period ?? ''} formatter={(value, name) => [value == null ? 'Tidak ada workbook' : `${Number(value).toFixed(2)}%`, name]} />} />
+          <ChartLegend content={<ChartLegendContent />} />
+          <Line type="monotone" dataKey="overallPercent" stroke="var(--color-overallPercent)" strokeWidth={3} connectNulls={false} dot={{ r: 3 }} />
+          <Line type="monotone" dataKey="leadingPercent" stroke="var(--color-leadingPercent)" strokeWidth={2} connectNulls={false} dot={{ r: 2 }} />
+          <Line type="monotone" dataKey="laggingPercent" stroke="var(--color-laggingPercent)" strokeWidth={2} connectNulls={false} dot={{ r: 2 }} />
+          <Line type="monotone" dataKey="csiPercent" stroke="var(--color-csiPercent)" strokeWidth={2} connectNulls={false} dot={{ r: 2 }} />
+        </LineChart>
+      </ChartContainer>
     </section>
   )
 }
@@ -100,6 +129,33 @@ export function MonthlyOperationsCharts({ daily }: { daily: DailyOperations[] })
       </section>
     </div>
   )
+}
+
+function buildSoiTrendRows(months: SoiMonthBaseline[]) {
+  if (months.length === 0) return []
+  const ordered = [...months].sort((left, right) => left.period.localeCompare(right.period))
+  const snapshots = new Map(ordered.map((snapshot) => [snapshot.period, snapshot]))
+  const [startYear, startMonth] = ordered[0].period.split('-').map(Number)
+  const [endYear, endMonth] = ordered[ordered.length - 1].period.split('-').map(Number)
+  const cursor = new Date(Date.UTC(startYear, startMonth - 1, 1))
+  const end = Date.UTC(endYear, endMonth - 1, 1)
+  const rows = []
+
+  while (cursor.getTime() <= end) {
+    const period = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`
+    const snapshot = snapshots.get(period)
+    rows.push({
+      period,
+      label: new Intl.DateTimeFormat('id-ID', { month: 'short', year: '2-digit', timeZone: 'Asia/Jakarta' }).format(cursor),
+      overallPercent: snapshot?.overallPercent ?? null,
+      leadingPercent: snapshot?.leadingPercent ?? null,
+      laggingPercent: snapshot?.laggingPercent ?? null,
+      csiPercent: snapshot?.csiPercent ?? null,
+    })
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+  }
+
+  return rows
 }
 
 function ChartEmpty({ children }: { children: React.ReactNode }) {
