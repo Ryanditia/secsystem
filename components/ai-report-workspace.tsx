@@ -210,6 +210,17 @@ export function AiReportWorkspace() {
               <div className="mt-3 flex flex-wrap gap-4 border-t border-white/[0.06] pt-2 text-[10px] text-slate-500"><span>Kartu parkir mobil: {draft.parkingCards.cars ?? '—'}</span><span>Motor: {draft.parkingCards.motorcycles ?? '—'}</span><span>Cadangan: {draft.parkingCards.reserve ?? '—'}</span></div>
             </PreviewSection>
 
+            <div className="grid gap-3 lg:grid-cols-2">
+              <PreviewSection title="Inventaris & lembur">
+                <PreviewList title="Serah terima" items={draft.inventoryHandover} />
+                <PreviewList title="Lembur" items={draft.overtime} />
+              </PreviewSection>
+              <PreviewSection title="Pintu akses & tamu">
+                <PreviewList title="Pintu" items={draft.gateUpdates.map((item) => `${item.gate}: ${item.status}`)} />
+                <p className="mt-2 text-[10px] text-slate-400">{draft.visitorNotes || 'Tidak ada catatan tamu/proyek.'}</p>
+              </PreviewSection>
+            </div>
+
             {error ? <p role="alert" className="rounded-xl border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2.5 text-xs text-rose-200">{error}</p> : null}
             <div className="flex flex-col-reverse gap-2 border-t border-white/[0.07] pt-4 sm:flex-row sm:justify-between">
               <button type="button" onClick={() => setDraft(null)} disabled={pending} className="h-10 rounded-xl border border-white/10 px-4 text-xs font-medium text-slate-300 transition hover:bg-white/[0.05] disabled:opacity-50">Buang pratinjau</button>
@@ -238,6 +249,10 @@ function MiniMetric({ icon: Icon, label, value, note }: { icon: typeof UsersRoun
 
 function PreviewSection({ title, children }: { title: string; children: React.ReactNode }) {
   return <section className="min-w-0 rounded-xl border border-white/[0.07] bg-[#0b0f13] p-3"><h4 className="mb-2 text-xs font-semibold text-slate-200">{title}</h4>{children}</section>
+}
+
+function PreviewList({ title, items }: { title: string; items: string[] }) {
+  return <div className="mb-2 last:mb-0"><p className="text-[10px] font-medium text-slate-600">{title}</p>{items.length ? <ul className="mt-1 flex flex-col gap-1 text-[10px] text-slate-400">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="mt-1 text-[10px] text-slate-600">Tidak dicantumkan.</p>}</div>
 }
 
 function VehicleList({ title, areas, total }: { title: string; areas: Array<{ location: string; count: number }>; total: number | null }) {

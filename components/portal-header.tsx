@@ -1,13 +1,15 @@
 import Link from 'next/link'
-import { ArrowUpRight, LayoutDashboard, ShieldCheck, UsersRound } from 'lucide-react'
+import { Activity, ArrowUpRight, ClipboardList, LayoutDashboard, ShieldCheck, UsersRound } from 'lucide-react'
 import type { AppUser } from '@/lib/authz'
 import { SignOutButton } from '@/components/sign-out-button'
 
 export function PortalHeader({ user, section }: { user: AppUser; section: string }) {
   const links = user.role === 'admin'
     ? [
-        { href: '/admin#tamu', label: 'Kontrol tamu', icon: UsersRound },
-        { href: '/admin#laporan', label: 'Laporan jaga', icon: LayoutDashboard },
+        { href: '/admin#riwayat-tamu', label: 'Kontrol tamu', icon: UsersRound },
+        { href: '/admin#laporan-ai', label: 'Laporan AI', icon: LayoutDashboard },
+        { href: '/admin/rekap', label: 'Rekap Harian', icon: ClipboardList },
+        { href: '/admin/soi', label: 'SOI', icon: Activity },
         { href: '/admin#akses', label: 'Akses supervisor', icon: ShieldCheck },
       ]
     : [
