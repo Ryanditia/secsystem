@@ -4,6 +4,9 @@ import { auth } from '@/lib/auth'
 import { getAppUser } from '@/lib/authz'
 import { SignInForm } from '@/components/sign-in-form'
 import { SignOutButton } from '@/components/sign-out-button'
+import { isAuthSecretStrong } from '@/lib/auth-config'
+
+export const dynamic = 'force-dynamic'
 
 export default async function SignInPage() {
   const current = await getAppUser()
@@ -20,7 +23,9 @@ export default async function SignInPage() {
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-lime-200">Akses terbatas</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Masuk ke portal</h1>
         <p className="mt-2 mb-6 text-sm leading-6 text-slate-500">Gunakan akun admin atau supervisor yang sudah diundang.</p>
-        {session?.user ? (
+        {!isAuthSecretStrong() ? (
+          <p role="alert" className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-xs leading-5 text-amber-100">Login dinonaktifkan sampai BETTER_AUTH_SECRET diganti dengan nilai acak minimal 32 karakter.</p>
+        ) : session?.user ? (
           <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4">
             <p className="text-xs leading-5 text-amber-100">Akun ini belum memiliki undangan aktif untuk workspace SecSystem. Minta admin mengirim undangan, lalu keluar dari sesi ini.</p>
             <div className="mt-2"><SignOutButton /></div>

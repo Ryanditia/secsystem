@@ -7,6 +7,8 @@ import { supervisorInvitations } from '@/lib/db/schema'
 import { hashInviteToken } from '@/lib/invitations'
 import { AcceptInvitationForm } from '@/components/account-forms'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AcceptInvitePage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token = '' } = await searchParams
   const session = await auth.api.getSession({ headers: await headers() })

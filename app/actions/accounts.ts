@@ -1,6 +1,6 @@
 'use server'
 
-import { and, count, eq, gt, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNull } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -9,7 +9,8 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { guardReports, supervisorInvitations, user, visitorRecords } from '@/lib/db/schema'
 import { createInviteToken, hashInviteToken, isValidBootstrapToken } from '@/lib/invitations'
-import { getAppUser, requireAppUser } from '@/lib/authz'
+import { isAuthSecretStrong, isStrongSecret } from '@/lib/auth-config'
+import { requireAppUser } from '@/lib/authz'
 
 export type FormState = {
   error?: string
@@ -33,7 +34,7 @@ export async function createFirstAdmin(_state: FormState, formData: FormData): P
   const expectedEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase()
   const expectedToken = process.env.INITIAL_ADMIN_SETUP_TOKEN
 
-  if (!parsed.success || !expectedEmail || !expectedToken) {
+  if (!parsed.success || !expectedEmail || !expectedToken || !isStrongSecret(expectedToken) || !isAuthSecretStrong()) {
     return { error: 'Data setup tidak valid atau konfigurasi admin belum lengkap.' }
   }
 
@@ -102,6 +103,20 @@ export async function createSupervisorInvitation(_state: FormState, formData: Fo
   if (!emailResult.success) return { error: 'Masukkan alamat email yang valid.' }
 
   const email = emailResult.data
+  const [existingUser] = await db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1)
+  if (existingUser) return { error: 'Email tersebut sudah memiliki akun. Gunakan email supervisor lain.' }
+
+  const [activeInvite] = await db.select({ id: supervisorInvitations.id })
+    .from(supervisorInvitations)
+    .where(and(
+      eq(supervisorInvitations.userId, current.workspaceId),
+      eq(supervisorInvitations.email, email),
+      isNull(supervisorInvitations.acceptedAt),
+      gt(supervisorInvitations.expiresAt, new Date()),
+    ))
+    .limit(1)
+  if (activeInvite) return { error: 'Undangan aktif untuk email ini sudah ada.' }
+
   const token = createInviteToken()
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
@@ -127,6 +142,7 @@ export async function acceptSupervisorInvitation(_state: FormState, formData: Fo
     password: formData.get('password'),
   })
   const token = String(formData.get('token') ?? '')
+  if (!isAuthSecretStrong()) return { error: 'Login belum aktif karena BETTER_AUTH_SECRET belum kuat.' }
   if (!parsed.success || token.length < 32 || token.length > 128) {
     return { error: 'Data undangan tidak valid.' }
   }
@@ -144,7 +160,8 @@ export async function acceptSupervisorInvitation(_state: FormState, formData: Fo
     .limit(1)
 
   if (!invite) return { error: 'Undangan tidak ditemukan, sudah digunakan, atau telah kedaluwarsa.' }
-  if (await getAppUser()) return { error: 'Keluar dari akun saat ini untuk menerima undangan.' }
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (session?.user) return { error: 'Keluar dari akun saat ini untuk menerima undangan.' }
 
   try {
     const result = await auth.api.signUpEmail({

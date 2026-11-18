@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { isAuthSecretStrong } from '@/lib/auth-config'
 import { db } from '@/lib/db'
 import { user } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -14,6 +15,7 @@ export type AppUser = {
 }
 
 export async function getAppUser(): Promise<AppUser | null> {
+  if (!isAuthSecretStrong()) return null
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return null
 

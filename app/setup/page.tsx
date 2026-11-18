@@ -5,6 +5,9 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { user } from '@/lib/db/schema'
 import { FirstAdminForm } from '@/components/account-forms'
+import { isAuthSecretStrong, isStrongSecret } from '@/lib/auth-config'
+
+export const dynamic = 'force-dynamic'
 
 export default async function SetupPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -14,7 +17,8 @@ export default async function SetupPage() {
   if (adminCount.value > 0) redirect('/sign-in')
 
   const initialAdminEmail = process.env.INITIAL_ADMIN_EMAIL?.trim() ?? ''
-  const setupConfigured = Boolean(initialAdminEmail && process.env.INITIAL_ADMIN_SETUP_TOKEN)
+  const setupToken = process.env.INITIAL_ADMIN_SETUP_TOKEN
+  const setupConfigured = Boolean(initialAdminEmail && isStrongSecret(setupToken) && isAuthSecretStrong())
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#080b0f] px-4 py-10 text-slate-100">
@@ -26,7 +30,7 @@ export default async function SetupPage() {
         {setupConfigured ? (
           <FirstAdminForm defaultEmail={initialAdminEmail} />
         ) : (
-          <p role="alert" className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-3 text-sm text-amber-100">Konfigurasi setup admin belum lengkap. Hubungi pengelola aplikasi.</p>
+          <p role="alert" className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-3 text-sm text-amber-100">Konfigurasi setup admin belum aman atau belum lengkap. Periksa nilai awal admin, token setup, dan BETTER_AUTH_SECRET di Settings → Vars.</p>
         )}
       </section>
     </main>

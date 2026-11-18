@@ -9,7 +9,10 @@ import { db } from '@/lib/db'
 import { guardReports, visitorRecords } from '@/lib/db/schema'
 import { getJakartaDate } from '@/lib/format'
 
-export default async function AdminPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string; updated?: string }> }) {
+  const { error, updated } = await searchParams
   const current = await requireAppUser('admin')
   const today = getJakartaDate()
   const workspace = current.workspaceId
@@ -20,6 +23,13 @@ export default async function AdminPage() {
     db.select().from(visitorRecords).where(eq(visitorRecords.userId, workspace)).orderBy(desc(visitorRecords.visitDate), desc(visitorRecords.createdAt)).limit(8),
     db.select().from(guardReports).where(eq(guardReports.userId, workspace)).orderBy(desc(guardReports.reportDate), desc(guardReports.createdAt)).limit(6),
   ])
+  const controlErrorMessages: Record<string, string> = {
+    'invalid-control': 'Periksa kembali status kunjungan, visitor pass, dan waktu aktual.',
+    'check-in-required': 'Isi jam check-in aktual untuk tamu yang sudah datang.',
+    'check-out-required': 'Isi jam check-out aktual untuk kunjungan yang sudah selesai.',
+    'record-not-found': 'Data tamu tidak ditemukan di workspace ini.',
+  }
+  const controlError = error ? controlErrorMessages[error] : undefined
 
   return (
     <main className="min-h-screen bg-[#080b0f] text-slate-100">
@@ -49,6 +59,9 @@ export default async function AdminPage() {
             <div className="mt-5"><GuardReportForm today={today} /></div>
           </section>
         </div>
+
+        {controlError ? <p role="alert" className="mt-7 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] px-4 py-3 text-xs text-rose-200">{controlError}</p> : null}
+        {updated === '1' ? <p role="status" className="mt-7 rounded-xl border border-lime-300/20 bg-lime-300/[0.06] px-4 py-3 text-xs text-lime-200">Status kunjungan dan visitor pass berhasil diperbarui.</p> : null}
 
         <section id="riwayat-tamu" className="mt-7 scroll-mt-6 rounded-2xl border border-white/[0.08] bg-[#101419] p-5 sm:p-6">
           <SectionTitle eyebrow="Data terbaru" title="Kontrol tamu tersimpan" description="Informasi kontak lengkap hanya tersedia di portal admin." />

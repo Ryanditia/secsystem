@@ -1,7 +1,8 @@
 'use server'
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { requireAppUser } from '@/lib/authz'
 import { db } from '@/lib/db'
@@ -26,6 +27,9 @@ export async function createVisitorRecord(_state: FormState, formData: FormData)
     purpose: z.string().trim().min(2).max(240),
     guestCount: z.string().regex(/^([1-9]\d{0,3})$/),
     visitorPassStatus: z.enum(['belum_diberikan', 'diberikan', 'dikembalikan']),
+    visitStatus: z.enum(['terjadwal', 'sedang_berkunjung', 'selesai']),
+    checkInTime: z.union([timeSchema, z.literal('')]),
+    checkOutTime: z.union([timeSchema, z.literal('')]),
     securityInductionConfirmed: z.boolean(),
     notes: z.string().trim().max(1000).optional(),
   }).safeParse({
@@ -41,17 +45,36 @@ export async function createVisitorRecord(_state: FormState, formData: FormData)
     purpose: String(formData.get('purpose') ?? ''),
     guestCount: String(formData.get('guestCount') ?? ''),
     visitorPassStatus: String(formData.get('visitorPassStatus') ?? ''),
+    visitStatus: String(formData.get('visitStatus') ?? ''),
+    checkInTime: String(formData.get('checkInTime') ?? ''),
+    checkOutTime: String(formData.get('checkOutTime') ?? ''),
     securityInductionConfirmed: formData.get('securityInductionConfirmed') === 'on',
     notes: String(formData.get('notes') ?? ''),
   })
 
   if (!parsed.success) return { error: 'Periksa kembali tanggal, jam, jumlah tamu, dan kolom wajib.' }
+  if (parsed.data.visitStatus !== 'terjadwal' && !parsed.data.checkInTime) {
+    return { error: 'Isi jam check-in aktual untuk tamu yang sudah datang.' }
+  }
+  if (parsed.data.visitStatus === 'selesai' && !parsed.data.checkOutTime) {
+    return { error: 'Isi jam check-out aktual untuk kunjungan yang sudah selesai.' }
+  }
+
+  const { checkInTime, checkOutTime, ...visitor } = parsed.data
+  const localTimestamp = (time: string) => new Date(`${visitor.visitDate}T${time}:00+07:00`)
+  const checkedInAt = visitor.visitStatus === 'terjadwal' || !checkInTime ? null : localTimestamp(checkInTime)
+  let checkedOutAt = visitor.visitStatus !== 'selesai' || !checkOutTime ? null : localTimestamp(checkOutTime)
+  if (checkedInAt && checkedOutAt && checkedOutAt < checkedInAt) {
+    checkedOutAt = new Date(checkedOutAt.getTime() + 24 * 60 * 60 * 1000)
+  }
 
   try {
     await db.insert(visitorRecords).values({
       userId: current.workspaceId,
       createdByUserId: current.id,
-      ...parsed.data,
+      ...visitor,
+      checkedInAt,
+      checkedOutAt,
       visitorPassConfirmation: null,
     })
   } catch {
@@ -61,6 +84,68 @@ export async function createVisitorRecord(_state: FormState, formData: FormData)
   revalidatePath('/admin')
   revalidatePath('/supervisor')
   return { success: 'Data kunjungan berhasil disimpan.' }
+}
+
+export async function updateVisitorControl(formData: FormData) {
+  const current = await requireAppUser('admin')
+  const parsed = z.object({
+    id: z.uuid(),
+    visitStatus: z.enum(['terjadwal', 'sedang_berkunjung', 'selesai']),
+    visitorPassStatus: z.enum(['belum_diberikan', 'diberikan', 'dikembalikan', 'tercatat_di_sheet']),
+    checkInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).or(z.literal('')),
+    checkOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).or(z.literal('')),
+  }).safeParse({
+    id: String(formData.get('id') ?? ''),
+    visitStatus: String(formData.get('visitStatus') ?? ''),
+    visitorPassStatus: String(formData.get('visitorPassStatus') ?? ''),
+    checkInTime: String(formData.get('checkInTime') ?? ''),
+    checkOutTime: String(formData.get('checkOutTime') ?? ''),
+  })
+
+  if (!parsed.success) redirect('/admin?error=invalid-control#riwayat-tamu')
+
+  const [record] = await db.select({
+    id: visitorRecords.id,
+    visitDate: visitorRecords.visitDate,
+    visitStatus: visitorRecords.visitStatus,
+    checkedInAt: visitorRecords.checkedInAt,
+    checkedOutAt: visitorRecords.checkedOutAt,
+  })
+    .from(visitorRecords)
+    .where(and(eq(visitorRecords.id, parsed.data.id), eq(visitorRecords.userId, current.workspaceId)))
+    .limit(1)
+  if (!record) redirect('/admin?error=record-not-found#riwayat-tamu')
+
+  const statusChanged = parsed.data.visitStatus !== record.visitStatus
+  if (parsed.data.visitStatus !== 'terjadwal' && !parsed.data.checkInTime && !record.checkedInAt && statusChanged) {
+    redirect('/admin?error=check-in-required#riwayat-tamu')
+  }
+  if (parsed.data.visitStatus === 'selesai' && !parsed.data.checkOutTime && !record.checkedOutAt && statusChanged) {
+    redirect('/admin?error=check-out-required#riwayat-tamu')
+  }
+
+  const localTimestamp = (time: string) => new Date(`${record.visitDate}T${time}:00+07:00`)
+  const checkedInAt = parsed.data.visitStatus === 'terjadwal'
+    ? null
+    : parsed.data.checkInTime ? localTimestamp(parsed.data.checkInTime) : record.checkedInAt
+  let checkedOutAt = parsed.data.visitStatus !== 'selesai'
+    ? null
+    : parsed.data.checkOutTime ? localTimestamp(parsed.data.checkOutTime) : record.checkedOutAt
+  if (checkedInAt && checkedOutAt && checkedOutAt < checkedInAt) {
+    checkedOutAt = new Date(checkedOutAt.getTime() + 24 * 60 * 60 * 1000)
+  }
+
+  await db.update(visitorRecords).set({
+    visitStatus: parsed.data.visitStatus,
+    visitorPassStatus: parsed.data.visitorPassStatus,
+    checkedInAt,
+    checkedOutAt,
+    updatedAt: new Date(),
+  }).where(and(eq(visitorRecords.id, record.id), eq(visitorRecords.userId, current.workspaceId)))
+
+  revalidatePath('/admin')
+  revalidatePath('/supervisor')
+  redirect('/admin?updated=1#riwayat-tamu')
 }
 
 export async function createGuardReport(_state: FormState, formData: FormData): Promise<FormState> {

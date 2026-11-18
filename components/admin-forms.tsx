@@ -76,9 +76,14 @@ export function VisitorEntryForm({ today }: { today: string }) {
         <Field label="Perusahaan / instansi" name="company" placeholder="Nama perusahaan atau perorangan" />
         <Field label="Bertemu dengan" name="host" placeholder="Nama karyawan / PIC" />
         <Field label="Jumlah tamu" name="guestCount" type="number" required defaultValue="1" />
+        <SelectField label="Status kunjungan" name="visitStatus" required options={[
+          { label: 'Terjadwal', value: 'terjadwal' }, { label: 'Sedang berkunjung', value: 'sedang_berkunjung' }, { label: 'Selesai', value: 'selesai' },
+        ]} />
         <SelectField label="Status visitor pass" name="visitorPassStatus" required options={[
           { label: 'Belum diberikan', value: 'belum_diberikan' }, { label: 'Sudah diberikan', value: 'diberikan' }, { label: 'Sudah dikembalikan', value: 'dikembalikan' },
         ]} />
+        <Field label="Jam aktual check-in" name="checkInTime" type="time" />
+        <Field label="Jam aktual check-out" name="checkOutTime" type="time" />
       </div>
       <Field label="Alamat" name="address" placeholder="Alamat perusahaan / tamu" />
       <Field label="Tujuan kedatangan" name="purpose" required placeholder="Meeting, maintenance, pengiriman, dan lainnya" />

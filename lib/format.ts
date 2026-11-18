@@ -19,6 +19,16 @@ export function getJakartaDate(now = new Date()) {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+export function getJakartaTimeInput(value: Date | null) {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(value)
+}
+
 export function displayText(value: string | null | undefined) {
   return value?.trim() || '—'
 }

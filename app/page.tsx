@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { user } from '@/lib/db/schema'
 import { getAppUser } from '@/lib/authz'
 
+export const dynamic = 'force-dynamic'
+
 export default async function HomePage() {
   const [adminCount] = await db.select({ value: count() }).from(user).where(eq(user.role, 'admin'))
   if (adminCount.value === 0) redirect('/setup')

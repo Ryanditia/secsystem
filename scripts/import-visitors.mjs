@@ -38,6 +38,8 @@ async function main() {
   let inserted = 0
   let skipped = 0
   try {
+    const [admin] = (await client.query(`SELECT id FROM public."user" WHERE role = 'admin' ORDER BY "createdAt" LIMIT 1`)).rows
+    const workspaceId = admin?.id ?? '__bootstrap__'
     await client.query('BEGIN')
     for (let index = 1; index < rows.length; index += 1) {
       const row = rows[index]
@@ -66,7 +68,7 @@ async function main() {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         ) ON CONFLICT ("sourceRowHash") DO NOTHING`,
         [
-          '__bootstrap__', '__bootstrap__', rowHash, index + 1, normalized(row[0]), visitDate,
+          workspaceId, workspaceId, rowHash, index + 1, normalized(row[0]), visitDate,
           normalized(row[2]), normalized(row[3]), normalized(row[4]), normalized(row[5]),
           normalized(row[6]), normalized(row[7]), normalized(row[8]), normalized(row[9]),
           normalized(row[10]), normalized(row[11]), inductionAnswer.startsWith('ya'),
@@ -81,14 +83,15 @@ async function main() {
     throw error
   } finally {
     client.release()
-    await pool.end()
   }
 
   process.stdout.write(`Visitor import complete: ${inserted} imported, ${skipped} skipped.\n`)
 }
 
-main().catch(async (error) => {
-  process.stderr.write(`Visitor import failed: ${error instanceof Error ? error.message : 'Unknown error'}\n`)
-  await pool.end()
-  process.exitCode = 1
-})
+main()
+  .then(() => pool.end())
+  .catch(async (error) => {
+    process.stderr.write(`Visitor import failed: ${error instanceof Error ? error.message : 'Unknown error'}\n`)
+    await pool.end()
+    process.exitCode = 1
+  })

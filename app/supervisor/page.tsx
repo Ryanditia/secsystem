@@ -7,6 +7,8 @@ import { db } from '@/lib/db'
 import { guardReports, visitorRecords } from '@/lib/db/schema'
 import { getJakartaDate } from '@/lib/format'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SupervisorPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const current = await requireAppUser('supervisor')
   const { date: requestedDate = getJakartaDate() } = await searchParams
