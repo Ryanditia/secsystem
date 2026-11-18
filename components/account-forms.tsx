@@ -33,10 +33,10 @@ function EmailCodeForm({
 }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <p className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5 text-xs leading-5 text-slate-300">Kode verifikasi dikirim ke <span className="font-medium text-white">{email}</span>. Masukkan kode dari email untuk melanjutkan.</p>
+      <p className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5 text-xs leading-5 text-slate-300">Kode verifikasi dikirim ke <span className="font-medium text-white">{email}</span>. Masukkan 6 digit kode terbaru. Kode lama tidak berlaku setelah meminta ulang.</p>
       <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-300">
         Kode verifikasi email
-        <input name="otp" type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={8} required className="h-11 rounded-xl border border-white/10 bg-[#0a0d11] px-3 text-sm tracking-[0.2em] text-white outline-none focus:border-lime-300/70 focus:ring-2 focus:ring-lime-300/15" />
+        <input name="otp" type="text" inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} minLength={6} maxLength={6} required className="h-11 rounded-xl border border-white/10 bg-[#0a0d11] px-3 text-sm tracking-[0.2em] text-white outline-none focus:border-lime-300/70 focus:ring-2 focus:ring-lime-300/15" />
       </label>
       {error ? <p role="alert" className="text-xs text-rose-300">{error}</p> : null}
       <button type="submit" disabled={pending} className="h-11 rounded-xl bg-lime-300 px-4 text-sm font-semibold text-slate-950 transition hover:bg-lime-200 disabled:opacity-60">{pending ? 'Memverifikasi…' : 'Verifikasi email'}</button>
@@ -113,33 +113,52 @@ export function FirstAdminForm({ defaultEmail, mode }: { defaultEmail: string; m
 
   async function verifyEmail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const code = otp.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setError('Masukkan 6 digit kode terbaru dari email.')
+      return
+    }
+
     setPending(true)
     setError('')
-    const { error: verifyError } = await authClient.emailOtp.verifyEmail({ email: defaultEmail, otp: otp.trim() })
-    if (verifyError) {
+    let canClaim = false
+    try {
+      const { error: verifyError } = await authClient.emailOtp.verifyEmail({ email: defaultEmail, otp: code })
+      if (verifyError) {
+        setError('Kode tidak cocok atau kedaluwarsa. Jika meminta ulang, gunakan kode terbaru.')
+        return
+      }
+      const { data: session } = await authClient.getSession()
+      if (!session?.user?.emailVerified) {
+        setError('Email belum terverifikasi. Masuk kembali setelah verifikasi selesai.')
+        return
+      }
+      canClaim = true
+    } catch {
+      setError('Verifikasi belum berhasil. Kode mungkin kedaluwarsa atau sudah diganti; kirim ulang kode terbaru.')
+    } finally {
       setPending(false)
-      setError('Kode verifikasi tidak cocok atau sudah kedaluwarsa.')
-      return
     }
-    const { data: session } = await authClient.getSession()
-    setPending(false)
-    if (!session?.user?.emailVerified) {
-      setError('Email belum terverifikasi. Masuk kembali setelah verifikasi selesai.')
-      return
-    }
-    await finishClaim()
+
+    if (canClaim) await finishClaim()
   }
 
   async function resendCode() {
     setPending(true)
     setError('')
-    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({ email: defaultEmail, type: 'email-verification' })
-    setPending(false)
-    if (resendError) {
-      setError('Kode belum dapat dikirim ulang. Pastikan pendaftaran email sudah dimulai.')
-      return
+    setOtp('')
+    try {
+      const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({ email: defaultEmail, type: 'email-verification' })
+      if (resendError) {
+        setError('Kode belum dapat dikirim ulang. Pastikan pendaftaran email sudah dimulai.')
+        return
+      }
+      setStep('verify')
+    } catch {
+      setError('Kode belum dapat dikirim ulang. Coba lagi beberapa saat.')
+    } finally {
+      setPending(false)
     }
-    setStep('verify')
   }
 
   if (step === 'claim') {
@@ -238,29 +257,48 @@ export function AcceptInvitationForm({ token, email, mode }: { token: string; em
 
   async function verifyEmail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const code = otp.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setError('Masukkan 6 digit kode terbaru dari email.')
+      return
+    }
+
     setPending(true)
     setError('')
-    const { error: verifyError } = await authClient.emailOtp.verifyEmail({ email, otp: otp.trim() })
-    if (verifyError) {
+    let canClaim = false
+    try {
+      const { error: verifyError } = await authClient.emailOtp.verifyEmail({ email, otp: code })
+      if (verifyError) {
+        setError('Kode tidak cocok atau kedaluwarsa. Jika meminta ulang, gunakan kode terbaru.')
+        return
+      }
+      const { data: session } = await authClient.getSession()
+      if (!session?.user?.emailVerified) {
+        setError('Email belum terverifikasi. Masuk kembali setelah verifikasi selesai.')
+        return
+      }
+      canClaim = true
+    } catch {
+      setError('Verifikasi belum berhasil. Kode mungkin kedaluwarsa atau sudah diganti; kirim ulang kode terbaru.')
+    } finally {
       setPending(false)
-      setError('Kode verifikasi tidak cocok atau sudah kedaluwarsa.')
-      return
     }
-    const { data: session } = await authClient.getSession()
-    setPending(false)
-    if (!session?.user?.emailVerified) {
-      setError('Email belum terverifikasi. Masuk kembali setelah verifikasi selesai.')
-      return
-    }
-    await finishClaim()
+
+    if (canClaim) await finishClaim()
   }
 
   async function resendCode() {
     setPending(true)
     setError('')
-    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'email-verification' })
-    setPending(false)
-    if (resendError) setError('Kode baru belum dapat dikirim. Coba lagi beberapa saat.')
+    setOtp('')
+    try {
+      const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'email-verification' })
+      if (resendError) setError('Kode baru belum dapat dikirim. Coba lagi beberapa saat.')
+    } catch {
+      setError('Kode baru belum dapat dikirim. Coba lagi beberapa saat.')
+    } finally {
+      setPending(false)
+    }
   }
 
   if (step === 'claim') {
