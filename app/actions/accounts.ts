@@ -30,19 +30,21 @@ export async function createFirstAdmin(_state: FormState, formData: FormData): P
     email: String(formData.get('email') ?? '').trim().toLowerCase(),
     password: formData.get('password'),
   })
-  const setupToken = String(formData.get('setupToken') ?? '')
+  const setupToken = String(formData.get('setupToken') ?? '').trim()
   const expectedEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase()
-  const expectedToken = process.env.INITIAL_ADMIN_SETUP_TOKEN
+  const expectedToken = process.env.INITIAL_ADMIN_SETUP_TOKEN?.trim()
 
-  if (!parsed.success || !expectedEmail || !expectedToken || !isStrongSecret(expectedToken) || !isAuthSecretStrong()) {
-    return { error: 'Data setup tidak valid atau konfigurasi admin belum lengkap.' }
+  if (!parsed.success) {
+    return { error: 'Nama wajib diisi dan kata sandi harus minimal 12 karakter.' }
   }
-
-  if (
-    parsed.data.email !== expectedEmail ||
-    !isValidBootstrapToken(setupToken, expectedToken)
-  ) {
-    return { error: 'Data setup tidak cocok. Periksa email dan token setup.' }
+  if (!expectedEmail || !expectedToken || !isStrongSecret(expectedToken) || !isAuthSecretStrong()) {
+    return { error: 'Konfigurasi setup belum lengkap atau belum aman. Periksa Settings → Vars.' }
+  }
+  if (parsed.data.email !== expectedEmail) {
+    return { error: 'Email admin harus sama dengan INITIAL_ADMIN_EMAIL di Settings → Vars.' }
+  }
+  if (!isValidBootstrapToken(setupToken, expectedToken)) {
+    return { error: 'Token setup tidak cocok. Jika lupa, ganti INITIAL_ADMIN_SETUP_TOKEN di Vars dengan token baru, simpan, lalu masukkan nilai barunya di sini.' }
   }
 
   const [existingAdmin] = await db

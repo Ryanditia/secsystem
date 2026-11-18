@@ -11,7 +11,7 @@ export function hashInviteToken(token: string) {
 }
 
 export function isValidBootstrapToken(input: string, expected: string) {
-  const actualBuffer = Buffer.from(input)
-  const expectedBuffer = Buffer.from(expected)
+  const actualBuffer = Buffer.from(input.trim())
+  const expectedBuffer = Buffer.from(expected.trim())
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
 }

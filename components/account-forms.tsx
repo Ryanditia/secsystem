@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { acceptSupervisorInvitation, createFirstAdmin, createSupervisorInvitation, type FormState } from '@/app/actions/accounts'
 
 const emptyState: FormState = {}
@@ -12,6 +12,8 @@ function Feedback({ state }: { state: FormState }) {
 }
 
 function CredentialFields({ showToken = false, defaultEmail }: { showToken?: boolean; defaultEmail?: string }) {
+  const [tokenVisible, setTokenVisible] = useState(false)
+
   return (
     <>
       <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-300">
@@ -20,7 +22,7 @@ function CredentialFields({ showToken = false, defaultEmail }: { showToken?: boo
       </label>
       <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-300">
         Email
-        <input name="email" type="email" autoComplete="email" defaultValue={defaultEmail} required maxLength={254} className="h-11 rounded-xl border border-white/10 bg-[#0a0d11] px-3 text-sm text-white outline-none focus:border-lime-300/70 focus:ring-2 focus:ring-lime-300/15" />
+        <input name="email" type="email" autoComplete="email" defaultValue={defaultEmail} readOnly={showToken} required maxLength={254} className="h-11 rounded-xl border border-white/10 bg-[#0a0d11] px-3 text-sm text-white outline-none focus:border-lime-300/70 focus:ring-2 focus:ring-lime-300/15 read-only:cursor-not-allowed read-only:opacity-80" />
       </label>
       <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-300">
         Kata sandi
@@ -28,10 +30,14 @@ function CredentialFields({ showToken = false, defaultEmail }: { showToken?: boo
         <span className="text-[10px] font-normal text-slate-500">Minimal 12 karakter.</span>
       </label>
       {showToken ? (
-        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-300">
-          Token setup satu kali
-          <input name="setupToken" type="password" autoComplete="off" required className="h-11 rounded-xl border border-white/10 bg-[#0a0d11] px-3 text-sm text-white outline-none focus:border-lime-300/70 focus:ring-2 focus:ring-lime-300/15" />
-        </label>
+        <div className="flex flex-col gap-1.5 text-xs font-medium text-slate-300">
+          <label htmlFor="setupToken">Token setup satu kali</label>
+          <div className="flex gap-2">
+            <input id="setupToken" name="setupToken" type={tokenVisible ? 'text' : 'password'} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} required maxLength={128} aria-describedby="setup-token-help" className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-[#0a0d11] px-3 text-sm text-white outline-none focus:border-lime-300/70 focus:ring-2 focus:ring-lime-300/15" />
+            <button type="button" aria-pressed={tokenVisible} onClick={() => setTokenVisible((visible) => !visible)} className="rounded-xl border border-white/10 px-3 text-[10px] font-medium text-slate-300 hover:bg-white/[0.05]">{tokenVisible ? 'Sembunyikan' : 'Tampilkan'}</button>
+          </div>
+          <span id="setup-token-help" className="text-[10px] font-normal text-slate-500">Harus sama persis dengan INITIAL_ADMIN_SETUP_TOKEN di Vars. Jika lupa, ganti nilainya di Vars lalu masukkan token baru.</span>
+        </div>
       ) : null}
     </>
   )

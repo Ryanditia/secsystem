@@ -26,7 +26,7 @@ export default async function SetupPage() {
         <span className="flex size-11 items-center justify-center rounded-xl bg-lime-300 text-lg font-bold text-slate-950">S</span>
         <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-lime-200">Setup satu kali</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Buat akun admin</h1>
-        <p className="mt-2 mb-6 text-sm leading-6 text-slate-500">Akun ini menjadi pemilik workspace SecSystem. Token setup hanya digunakan sekali.</p>
+        <p className="mt-2 mb-6 text-sm leading-6 text-slate-500">Akun ini menjadi pemilik workspace SecSystem. Email sudah dipatok dari Vars; token setup harus sama persis dan hanya digunakan sekali. Gunakan tombol Tampilkan untuk memeriksa token yang ditempel.</p>
         {setupConfigured ? (
           <FirstAdminForm defaultEmail={initialAdminEmail} />
         ) : (
