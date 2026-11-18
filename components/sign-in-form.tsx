@@ -22,7 +22,7 @@ export function SignInForm() {
 
     setPending(false)
     if (result.error) {
-      setError('Email atau kata sandi tidak cocok.')
+      setError('Email atau kata sandi tidak cocok, atau email belum diverifikasi.')
       return
     }
 

@@ -1,9 +1,8 @@
 import { auth } from '@/lib/auth'
-import { isAuthSecretStrong } from '@/lib/auth-config'
+import { isNeonAuthConfigured } from '@/lib/auth-config'
 import { db } from '@/lib/db'
 import { user } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 export type AppUser = {
@@ -15,9 +14,9 @@ export type AppUser = {
 }
 
 export async function getAppUser(): Promise<AppUser | null> {
-  if (!isAuthSecretStrong()) return null
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) return null
+  if (!isNeonAuthConfigured()) return null
+  const { data: session, error } = await auth.getSession()
+  if (error || !session?.user?.emailVerified) return null
 
   const [record] = await db
     .select({ id: user.id, name: user.name, email: user.email, role: user.role, workspaceId: user.workspaceId })

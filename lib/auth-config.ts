@@ -7,3 +7,7 @@ export function isStrongSecret(value: string | undefined) {
 export function isAuthSecretStrong() {
   return isStrongSecret(process.env.BETTER_AUTH_SECRET)
 }
+
+export function isNeonAuthConfigured() {
+  return Boolean(process.env.NEON_AUTH_BASE_URL && isAuthSecretStrong())
+}

@@ -2,14 +2,13 @@
 
 import { and, eq, gt, isNull } from 'drizzle-orm'
 import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { guardReports, supervisorInvitations, user, visitorRecords } from '@/lib/db/schema'
-import { createInviteToken, hashInviteToken, isValidBootstrapToken } from '@/lib/invitations'
-import { isAuthSecretStrong, isStrongSecret } from '@/lib/auth-config'
+import { hashInviteToken, createInviteToken } from '@/lib/invitations'
+import { isNeonAuthConfigured } from '@/lib/auth-config'
 import { requireAppUser } from '@/lib/authz'
 
 export type FormState = {
@@ -18,70 +17,60 @@ export type FormState = {
   inviteUrl?: string
 }
 
-const accountSchema = z.object({
-  name: z.string().trim().min(2).max(100),
-  email: z.email().max(254),
-  password: z.string().min(12).max(128),
-})
-
-export async function createFirstAdmin(_state: FormState, formData: FormData): Promise<FormState> {
-  const parsed = accountSchema.safeParse({
-    name: formData.get('name'),
-    email: String(formData.get('email') ?? '').trim().toLowerCase(),
-    password: formData.get('password'),
-  })
-  const setupToken = String(formData.get('setupToken') ?? '').trim()
-  const expectedEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase()
-  const expectedToken = process.env.INITIAL_ADMIN_SETUP_TOKEN?.trim()
-
-  if (!parsed.success) {
-    return { error: 'Nama wajib diisi dan kata sandi harus minimal 12 karakter.' }
-  }
-  if (!expectedEmail || !expectedToken || !isStrongSecret(expectedToken) || !isAuthSecretStrong()) {
-    return { error: 'Konfigurasi setup belum lengkap atau belum aman. Periksa Settings → Vars.' }
-  }
-  if (parsed.data.email !== expectedEmail) {
-    return { error: 'Email admin harus sama dengan INITIAL_ADMIN_EMAIL di Settings → Vars.' }
-  }
-  if (!isValidBootstrapToken(setupToken, expectedToken)) {
-    return { error: 'Token setup tidak cocok. Jika lupa, ganti INITIAL_ADMIN_SETUP_TOKEN di Vars dengan token baru, simpan, lalu masukkan nilai barunya di sini.' }
+export async function claimFirstAdmin(): Promise<FormState> {
+  if (!isNeonAuthConfigured()) return { error: 'Konfigurasi Neon Auth belum siap.' }
+  const { data: session, error } = await auth.getSession()
+  if (error || !session?.user || !session.user.emailVerified) {
+    return { error: 'Verifikasi email admin terlebih dahulu.' }
   }
 
-  const [existingAdmin] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(user.role, 'admin'))
-    .limit(1)
+  const initialAdminEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase()
+  if (!initialAdminEmail || session.user.email.trim().toLowerCase() !== initialAdminEmail) {
+    return { error: 'Akun ini bukan email admin awal yang dikonfigurasi.' }
+  }
 
-  if (existingAdmin) return { error: 'Setup admin awal sudah pernah digunakan.' }
+  const [existingAdmin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1)
+  if (existingAdmin && existingAdmin.id !== session.user.id) {
+    return { error: 'Admin awal sudah dibuat. Minta admin mengundang akun supervisor ini.' }
+  }
 
   try {
-    const result = await auth.api.signUpEmail({
-      headers: await headers(),
-      body: {
-        name: parsed.data.name,
-        email: parsed.data.email,
-        password: parsed.data.password,
-      },
+    await db.transaction(async (transaction) => {
+      const name = session.user.name?.trim() || session.user.email.split('@')[0]
+      await transaction.insert(user).values({
+        id: session.user.id,
+        name,
+        email: session.user.email.trim().toLowerCase(),
+        emailVerified: true,
+        role: 'admin',
+        workspaceId: session.user.id,
+      }).onConflictDoUpdate({
+        target: user.id,
+        set: {
+          name,
+          email: session.user.email.trim().toLowerCase(),
+          emailVerified: true,
+          role: 'admin',
+          workspaceId: session.user.id,
+          updatedAt: new Date(),
+        },
+      })
+
+      await transaction.update(visitorRecords)
+        .set({ userId: session.user.id, createdByUserId: session.user.id })
+        .where(eq(visitorRecords.userId, '__bootstrap__'))
+
+      await transaction.update(guardReports)
+        .set({ userId: session.user.id, createdByUserId: session.user.id })
+        .where(eq(guardReports.userId, '__bootstrap__'))
     })
-
-    await db.update(user)
-      .set({ role: 'admin', workspaceId: result.user.id, emailVerified: true, updatedAt: new Date() })
-      .where(eq(user.id, result.user.id))
-
-    await db.update(visitorRecords)
-      .set({ userId: result.user.id, createdByUserId: result.user.id })
-      .where(eq(visitorRecords.userId, '__bootstrap__'))
-
-    await db.update(guardReports)
-      .set({ userId: result.user.id, createdByUserId: result.user.id })
-      .where(eq(guardReports.userId, '__bootstrap__'))
   } catch {
-    return { error: 'Setup tidak dapat diselesaikan. Pastikan email belum terdaftar lalu coba lagi.' }
+    return { error: 'Akun admin tidak dapat diaktifkan. Coba lagi atau hubungi pengelola aplikasi.' }
   }
 
   revalidatePath('/')
-  redirect('/admin')
+  revalidatePath('/admin')
+  return { success: 'Akun admin aktif.' }
 }
 
 function getRequestOrigin(requestHeaders: Headers) {
@@ -137,62 +126,76 @@ export async function createSupervisorInvitation(_state: FormState, formData: Fo
   return { success: 'Undangan supervisor berhasil dibuat.', inviteUrl: inviteUrl.toString() }
 }
 
-export async function acceptSupervisorInvitation(_state: FormState, formData: FormData): Promise<FormState> {
-  const parsed = accountSchema.safeParse({
-    name: formData.get('name'),
-    email: String(formData.get('email') ?? '').trim().toLowerCase(),
-    password: formData.get('password'),
-  })
-  const token = String(formData.get('token') ?? '')
-  if (!isAuthSecretStrong()) return { error: 'Login belum aktif karena BETTER_AUTH_SECRET belum kuat.' }
-  if (!parsed.success || token.length < 32 || token.length > 128) {
-    return { error: 'Data undangan tidak valid.' }
+export async function acceptSupervisorInvitation(token: string): Promise<FormState> {
+  const normalizedToken = token.trim()
+  if (!isNeonAuthConfigured() || normalizedToken.length < 32 || normalizedToken.length > 128) {
+    return { error: 'Undangan tidak valid atau autentikasi belum siap.' }
   }
 
-  const tokenHash = hashInviteToken(token)
+  const { data: session, error } = await auth.getSession()
+  if (error || !session?.user || !session.user.emailVerified) {
+    return { error: 'Masuk dan verifikasi email yang menerima undangan terlebih dahulu.' }
+  }
+
+  const tokenHash = hashInviteToken(normalizedToken)
   const now = new Date()
   const [invite] = await db.select()
     .from(supervisorInvitations)
     .where(and(
       eq(supervisorInvitations.tokenHash, tokenHash),
-      eq(supervisorInvitations.email, parsed.data.email),
+      eq(supervisorInvitations.email, session.user.email.trim().toLowerCase()),
       isNull(supervisorInvitations.acceptedAt),
       gt(supervisorInvitations.expiresAt, now),
     ))
     .limit(1)
 
-  if (!invite) return { error: 'Undangan tidak ditemukan, sudah digunakan, atau telah kedaluwarsa.' }
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (session?.user) return { error: 'Keluar dari akun saat ini untuk menerima undangan.' }
+  if (!invite) {
+    const [existingProfile] = await db.select({ id: user.id, role: user.role, workspaceId: user.workspaceId })
+      .from(user)
+      .where(eq(user.id, session.user.id))
+      .limit(1)
+    if (existingProfile?.role === 'supervisor' && existingProfile.workspaceId) {
+      return { success: 'Akun supervisor sudah aktif.' }
+    }
+    return { error: 'Undangan tidak cocok dengan email, sudah dipakai, atau sudah kedaluwarsa.' }
+  }
 
   try {
-    const result = await auth.api.signUpEmail({
-      headers: await headers(),
-      body: {
-        name: parsed.data.name,
-        email: parsed.data.email,
-        password: parsed.data.password,
-      },
+    await db.transaction(async (transaction) => {
+      const [claimed] = await transaction.update(supervisorInvitations)
+        .set({ acceptedAt: new Date() })
+        .where(and(
+          eq(supervisorInvitations.id, invite.id),
+          eq(supervisorInvitations.tokenHash, tokenHash),
+          isNull(supervisorInvitations.acceptedAt),
+          gt(supervisorInvitations.expiresAt, new Date()),
+        ))
+        .returning({ id: supervisorInvitations.id })
+      if (!claimed) throw new Error('Invitation already claimed')
+
+      await transaction.insert(user).values({
+        id: session.user.id,
+        name: session.user.name?.trim() || session.user.email.split('@')[0],
+        email: session.user.email.trim().toLowerCase(),
+        emailVerified: true,
+        role: 'supervisor',
+        workspaceId: invite.userId,
+      }).onConflictDoUpdate({
+        target: user.id,
+        set: {
+          name: session.user.name?.trim() || session.user.email.split('@')[0],
+          email: session.user.email.trim().toLowerCase(),
+          emailVerified: true,
+          role: 'supervisor',
+          workspaceId: invite.userId,
+          updatedAt: new Date(),
+        },
+      })
     })
-
-    const [claimedInvite] = await db.update(supervisorInvitations)
-      .set({ acceptedAt: new Date() })
-      .where(and(
-        eq(supervisorInvitations.id, invite.id),
-        isNull(supervisorInvitations.acceptedAt),
-        gt(supervisorInvitations.expiresAt, new Date()),
-      ))
-      .returning({ id: supervisorInvitations.id })
-
-    if (!claimedInvite) return { error: 'Undangan sudah digunakan. Minta admin membuat undangan baru.' }
-
-    await db.update(user)
-      .set({ role: 'supervisor', workspaceId: invite.userId, emailVerified: true, updatedAt: new Date() })
-      .where(eq(user.id, result.user.id))
   } catch {
-    return { error: 'Undangan tidak dapat diproses. Pastikan email belum terdaftar.' }
+    return { error: 'Undangan tidak dapat diaktifkan. Minta admin membuat undangan baru.' }
   }
 
   revalidatePath('/supervisor')
-  redirect('/supervisor')
+  return { success: 'Akun supervisor aktif.' }
 }
