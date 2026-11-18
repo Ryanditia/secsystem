@@ -8,3 +8,6 @@ node_modules
 .next/
 .env*.local
 .DS_Store
+
+# Contains personnel health and identifier data; keep the source workbook out of Git.
+data/SOI-AAL_HO-Juli-2026-008e15.xlsx
