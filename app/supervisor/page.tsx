@@ -1,10 +1,11 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, ne } from 'drizzle-orm'
 import { CalendarDays, ClipboardCheck, UsersRound } from 'lucide-react'
 import { PortalHeader } from '@/components/portal-header'
 import { DateFilter } from '@/components/record-search'
+import { ReportAnalytics } from '@/components/report-analytics'
 import { requireAppUser } from '@/lib/authz'
 import { db } from '@/lib/db'
-import { guardReports, visitorRecords } from '@/lib/db/schema'
+import { aiGuardReports, employeeIdCardIncidents, guardReports, visitorRecords } from '@/lib/db/schema'
 import { getJakartaDate } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,7 @@ export default async function SupervisorPage({ searchParams }: { searchParams: P
   const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : getJakartaDate()
   const workspace = current.workspaceId
 
-  const [visitors, reports, [visitorCount], [reportCount]] = await Promise.all([
+  const [visitors, reports, aiReports, idCardIncidents, [visitorCount], [reportCount]] = await Promise.all([
     db.select({
       id: visitorRecords.id,
       visitorName: visitorRecords.visitorName,
@@ -29,13 +30,17 @@ export default async function SupervisorPage({ searchParams }: { searchParams: P
       visitStatus: visitorRecords.visitStatus,
     }).from(visitorRecords).where(and(eq(visitorRecords.userId, workspace), eq(visitorRecords.visitDate, selectedDate))).orderBy(visitorRecords.arrivalTime).limit(200),
     db.select().from(guardReports).where(and(eq(guardReports.userId, workspace), eq(guardReports.reportDate, selectedDate))).orderBy(guardReports.shift, guardReports.team).limit(24),
+    db.select().from(aiGuardReports).where(eq(aiGuardReports.userId, workspace)).orderBy(desc(aiGuardReports.reportDate), desc(aiGuardReports.createdAt)).limit(30),
+    db.select().from(employeeIdCardIncidents).where(eq(employeeIdCardIncidents.userId, workspace)).orderBy(desc(employeeIdCardIncidents.reportDate), desc(employeeIdCardIncidents.createdAt)).limit(50),
     db.select({ value: count() }).from(visitorRecords).where(and(eq(visitorRecords.userId, workspace), eq(visitorRecords.visitDate, selectedDate))),
-    db.select({ value: count() }).from(guardReports).where(and(eq(guardReports.userId, workspace), eq(guardReports.reportDate, selectedDate))),
+    db.select({ value: count() }).from(aiGuardReports).where(and(eq(aiGuardReports.userId, workspace), eq(aiGuardReports.reportDate, selectedDate), ne(aiGuardReports.reportType, 'id-card'))),
   ])
 
   const headcount = visitors.reduce((total, visitor) => total + (Number.parseInt(visitor.guestCount, 10) || 0), 0)
-  const incompleteReports = reports.filter((report) => report.attendanceStatus !== 'Lengkap').length
-  const findingsCount = reports.filter((report) => report.findings.trim() && !['nihil', 'tidak ada', '-'].includes(report.findings.trim().toLowerCase())).length
+  const shiftReports = aiReports.filter((report) => report.reportType !== 'id-card')
+  const incompleteReports = shiftReports.filter((report) => report.structuredData.attendanceStatus !== 'Lengkap').length
+  const findingsCount = aiReports.filter((report) => report.structuredData.findings.length > 0 || report.structuredData.cardIncidents.length > 0).length
+  const idCardCount = idCardIncidents.filter((incident) => incident.reportDate === selectedDate).length
   const [year, month, day] = selectedDate.split('-').map(Number)
   const dateLabel = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date(year, month - 1, day))
 
@@ -47,18 +52,21 @@ export default async function SupervisorPage({ searchParams }: { searchParams: P
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-lime-200">Pemantauan kinerja</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Ringkasan operasional</h1>
-            <p className="mt-2 text-sm text-slate-500">Pantau kontrol tamu dan kelengkapan laporan tanpa mengubah data.</p>
+            <p className="mt-2 text-sm text-slate-500">Pantau data tamu tersimpan, laporan AI, personel, tugas, kendaraan, dan kartu ID tanpa mengubah data.</p>
           </div>
           <DateFilter date={selectedDate} />
         </div>
 
         <div className="mt-6 flex items-center gap-2 text-xs text-slate-400"><CalendarDays size={15} aria-hidden="true" /> {dateLabel}</div>
-        <section id="ringkasan" aria-label="Ringkasan kinerja" className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section id="ringkasan" aria-label="Ringkasan kinerja" className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Metric icon={UsersRound} label="Catatan kunjungan" value={visitorCount.value} note={`${headcount} tamu tercatat`} />
-          <Metric icon={ClipboardCheck} label="Laporan shift masuk" value={`${reportCount.value} / 12`} note="Target 3 shift × 4 regu" />
-          <Metric icon={ClipboardCheck} label="Laporan belum lengkap" value={incompleteReports} note="Kehadiran kurang atau tidak lengkap" />
-          <Metric icon={ClipboardCheck} label="Shift dengan temuan" value={findingsCount} note="Perlu tindak lanjut supervisor" />
+          <Metric icon={ClipboardCheck} label="Laporan AI masuk" value={`${reportCount.value} / 12`} note="Target 3 shift × 4 regu" />
+          <Metric icon={ClipboardCheck} label="Perlu verifikasi" value={incompleteReports} note="Kehadiran masih ambigu atau kurang" />
+          <Metric icon={ClipboardCheck} label="Laporan dengan temuan" value={findingsCount} note="Perlu tindak lanjut supervisor" />
+          <Metric icon={ClipboardCheck} label="Temuan kartu ID" value={idCardCount} note="Pada tanggal terpilih" />
         </section>
+
+        <section className="mt-6"><SectionTitle eyebrow="Read-only" title="KPI personel, kendaraan, dan tugas" description="Ringkasan dari laporan AI yang sudah ditinjau admin." /><div className="mt-4"><ReportAnalytics reports={aiReports} incidents={idCardIncidents} /></div></section>
 
         <section id="tamu" className="mt-7 scroll-mt-5 rounded-2xl border border-white/[0.08] bg-[#101419] p-5 sm:p-6">
           <SectionTitle eyebrow="Read-only" title="Kontrol tamu" description="Data kontak pribadi tidak ditampilkan di portal supervisor." />

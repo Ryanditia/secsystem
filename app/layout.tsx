@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'SecSystem — Operasional Keamanan',
-  description: 'Portal admin kontrol tamu dan laporan tugas jaga, serta pemantauan kinerja supervisor.',
+  description: 'Dashboard keamanan untuk arsip tamu, laporan jaga berbantuan AI, pemantauan kartu ID, personel, kendaraan, dan tugas.',
   generator: 'v0.app',
   referrer: 'strict-origin-when-cross-origin',
   icons: {

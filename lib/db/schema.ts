@@ -1,4 +1,5 @@
 import { boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import type { AiReportType, GuardReportDraft, IdCardStatus } from '@/lib/guard-report'
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -97,11 +98,43 @@ export const guardReports = pgTable('guard_reports', {
   visitorProjectNotes: text('visitorProjectNotes').notNull().default(''),
   findings: text('findings').notNull().default(''),
   reporter: text('reporter').notNull().default(''),
+  rawInput: text('rawInput'),
+  structuredData: jsonb('structuredData').$type<GuardReportDraft>(),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex('guard_reports_workspace_date_shift_team').on(table.userId, table.reportDate, table.shift, table.team),
   index('guard_reports_workspace_date_idx').on(table.userId, table.reportDate),
+])
+
+export const aiGuardReports = pgTable('ai_guard_reports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('userId').notNull(),
+  createdByUserId: text('createdByUserId').notNull(),
+  reportDate: date('reportDate').notNull(),
+  reportType: text('reportType').$type<AiReportType>().notNull(),
+  shift: text('shift'),
+  team: text('team'),
+  rawInput: text('rawInput').notNull(),
+  structuredData: jsonb('structuredData').$type<GuardReportDraft>().notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const employeeIdCardIncidents = pgTable('employee_id_card_incidents', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('userId').notNull(),
+  createdByUserId: text('createdByUserId').notNull(),
+  reportId: uuid('reportId').notNull(),
+  reportDate: date('reportDate').notNull(),
+  employeeName: text('employeeName').notNull(),
+  department: text('department').notNull().default(''),
+  status: text('status').$type<IdCardStatus>().notNull(),
+  details: text('details').notNull().default(''),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('employee_id_card_incidents_workspace_date_idx').on(table.userId, table.reportDate),
+  index('employee_id_card_incidents_workspace_employee_date_idx').on(table.userId, table.employeeName, table.reportDate),
 ])
 
 export const supervisorInvitations = pgTable('supervisor_invitations', {
